@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/OAuth2AuthBroker/OAuth2AuthBroker.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/OAuth2AuthBroker.Tests/OAuth2AuthBroker.Tests.csproj" />
+  </Folder>
+</Solution>
