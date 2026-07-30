@@ -60,7 +60,5 @@ public sealed class ReissueRuleOptions
 
 public sealed class CacheOptions
 {
-    public int LocalTtlMinutes { get; init; } = 10;
-
     public string? RedisConnectionString { get; init; }
 }

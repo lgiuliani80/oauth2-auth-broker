@@ -5,7 +5,7 @@ Reverse proxy OAuth2 broker based on YARP that:
 - Accepts JWTs from multiple OIDC issuers.
 - Applies token pass-through or token exchange only on routes protected by policy `authenticated`.
 - Leaves routes without authorization policy in pure pass-through mode.
-- Caches exchanged tokens with HybridCache.
+- Uses only MSAL token cache for exchanged tokens.
 
 ## Current implementation highlights
 
@@ -22,9 +22,8 @@ Reverse proxy OAuth2 broker based on YARP that:
 
 ## Cache behavior
 
-- Cache key: `authority|client_id|scope`.
-- Local TTL: `min(LocalTtlMinutes, exp-now-5s)`.
-- Distributed TTL: `exp-now-5s`.
+- Token caching is handled by MSAL (`AppTokenCache`) only.
+- MSAL cache is persisted through `IDistributedCache`.
 - Distributed cache provider:
   - default: `MemoryDistributedCache`
   - if `AuthBroker:Cache:RedisConnectionString` is set: `StackExchange.RedisCache`

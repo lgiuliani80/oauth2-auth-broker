@@ -1,5 +1,5 @@
 using System.Security.Cryptography.X509Certificates;
-using Microsoft.Extensions.Caching.Hybrid;
+using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Options;
 using Microsoft.Identity.Client;
 using OAuth2AuthBroker.Options;
@@ -8,23 +8,17 @@ namespace OAuth2AuthBroker.Services;
 
 public sealed class TokenExchangeService : ITokenExchangeService
 {
-    private readonly HybridCache _hybridCache;
+    private readonly IDistributedCache _distributedCache;
     private readonly IRuleMatcher _ruleMatcher;
-    private readonly IOptionsMonitor<BrokerConfigurationOptions> _optionsMonitor;
-    private readonly TimeProvider _timeProvider;
     private readonly ILogger<TokenExchangeService> _logger;
 
     public TokenExchangeService(
-        HybridCache hybridCache,
+        IDistributedCache distributedCache,
         IRuleMatcher ruleMatcher,
-        IOptionsMonitor<BrokerConfigurationOptions> optionsMonitor,
-        TimeProvider timeProvider,
         ILogger<TokenExchangeService> logger)
     {
-        _hybridCache = hybridCache;
+        _distributedCache = distributedCache;
         _ruleMatcher = ruleMatcher;
-        _optionsMonitor = optionsMonitor;
-        _timeProvider = timeProvider;
         _logger = logger;
     }
 
@@ -45,53 +39,22 @@ public sealed class TokenExchangeService : ITokenExchangeService
             ? ResolveDefaultScope(tokenContext.Audiences)
             : match.Rule.Scope!;
 
-        var cacheKey = BuildCacheKey(match.Rule.Authority, match.Rule.ClientId, scope);
+        var response = await RequestTokenWithMsalAsync(
+            match.Rule,
+            scope,
+            tokenContext.RawAccessToken,
+            _distributedCache,
+            cancellationToken);
 
-        var cached = await TryGetCachedTokenAsync(cacheKey, cancellationToken);
-        if (!string.IsNullOrWhiteSpace(cached))
-        {
-            _logger.LogDebug("Token cache hit for {Authority} / {ClientId}", match.Rule.Authority, match.Rule.ClientId);
-            return cached;
-        }
-
-        _logger.LogDebug("Token cache miss for {Authority} / {ClientId}", match.Rule.Authority, match.Rule.ClientId);
-
-        var response = await RequestTokenWithMsalAsync(match.Rule, scope, tokenContext.RawAccessToken, cancellationToken);
-        var localTtlConfigured = TimeSpan.FromMinutes(Math.Max(_optionsMonitor.CurrentValue.Cache.LocalTtlMinutes, 1));
-        var ttl = TokenCacheTtlCalculator.Compute(response.AccessToken, localTtlConfigured, _timeProvider, response.ExpiresIn);
-
-        if (ttl is { } configuredTtls)
-        {
-            await _hybridCache.SetAsync(
-                cacheKey,
-                response.AccessToken,
-                options: new HybridCacheEntryOptions
-                {
-                    LocalCacheExpiration = configuredTtls.LocalTtl,
-                    Expiration = configuredTtls.DistributedTtl
-                },
-                cancellationToken: cancellationToken);
-        }
-
+        _logger.LogDebug("Token acquired via MSAL cache for {Authority} / {ClientId}", match.Rule.Authority, match.Rule.ClientId);
         return response.AccessToken;
-    }
-
-    private async Task<string?> TryGetCachedTokenAsync(string cacheKey, CancellationToken cancellationToken)
-    {
-        return await _hybridCache.GetOrCreateAsync(
-            cacheKey,
-            static _ => new ValueTask<string?>(result: null),
-            options: new HybridCacheEntryOptions
-            {
-                Flags = HybridCacheEntryFlags.DisableUnderlyingData
-            },
-            cancellationToken: cancellationToken);
     }
 
     private static async Task<TokenResponse> RequestTokenWithMsalAsync(
         ReissueRuleOptions rule,
         string scope,
         string inboundAccessToken,
+        IDistributedCache distributedCache,
         CancellationToken cancellationToken)
     {
         var builder = ConfidentialClientApplicationBuilder
@@ -118,6 +81,11 @@ public sealed class TokenExchangeService : ITokenExchangeService
         }
 
         var app = builder.Build();
+        ConfigureMsalTokenCache(
+            app.AppTokenCache,
+            distributedCache,
+            BuildAppTokenCacheKeyPrefix(rule.Authority, rule.ClientId));
+
         var result = await app.AcquireTokenForClient([scope]).ExecuteAsync(cancellationToken);
 
         return new TokenResponse
@@ -139,8 +107,51 @@ public sealed class TokenExchangeService : ITokenExchangeService
         return $"{firstAudience}/.default";
     }
 
-    private static string BuildCacheKey(string authority, string clientId, string scope)
-        => $"{authority}|{clientId}|{scope}";
+    private static string BuildAppTokenCacheKeyPrefix(string authority, string clientId)
+        => $"msal:app-token:{authority}|{clientId}";
+
+    private static void ConfigureMsalTokenCache(
+        ITokenCache tokenCache,
+        IDistributedCache distributedCache,
+        string cacheKeyPrefix)
+    {
+        tokenCache.SetBeforeAccessAsync(async args =>
+        {
+            var cacheKey = BuildMsalCacheKey(cacheKeyPrefix, args);
+            var bytes = await distributedCache.GetAsync(cacheKey, args.CancellationToken).ConfigureAwait(false);
+            if (bytes is { Length: > 0 })
+            {
+                args.TokenCache.DeserializeMsalV3(bytes, shouldClearExistingCache: true);
+            }
+        });
+
+        tokenCache.SetAfterAccessAsync(async args =>
+        {
+            if (!args.HasStateChanged)
+            {
+                return;
+            }
+
+            var cacheKey = BuildMsalCacheKey(cacheKeyPrefix, args);
+            var bytes = args.TokenCache.SerializeMsalV3();
+
+            await distributedCache.SetAsync(
+                cacheKey,
+                bytes,
+                new DistributedCacheEntryOptions(),
+                args.CancellationToken).ConfigureAwait(false);
+        });
+    }
+
+    private static string BuildMsalCacheKey(string cacheKeyPrefix, TokenCacheNotificationArgs args)
+    {
+        if (string.IsNullOrWhiteSpace(args.ClientId))
+        {
+            return cacheKeyPrefix;
+        }
+
+        return $"{cacheKeyPrefix}|{args.ClientId}";
+    }
 
     private static X509Certificate2 LoadCertificate(string certificateHint, string? password)
     {

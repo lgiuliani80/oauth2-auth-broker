@@ -24,11 +24,6 @@ public sealed class BrokerOptionsValidator : IValidateOptions<BrokerConfiguratio
             errors.Add($"Duplicate allowed issuers: {string.Join(", ", duplicateIssuers)}");
         }
 
-        if (options.Cache.LocalTtlMinutes <= 0)
-        {
-            errors.Add("Cache:LocalTtlMinutes must be greater than zero.");
-        }
-
         for (var i = 0; i < options.ReissueRules.Count; i++)
         {
             var rule = options.ReissueRules[i];

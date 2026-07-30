@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Caching.Hybrid;
 using OAuth2AuthBroker.Auth;
 using OAuth2AuthBroker.Middleware;
 using OAuth2AuthBroker.Options;
@@ -14,8 +13,6 @@ builder.Services
 builder.Services.AddSingleton<Microsoft.Extensions.Options.IValidateOptions<BrokerConfigurationOptions>, BrokerOptionsValidator>();
 
 var brokerOptions = builder.Configuration.GetSection(BrokerConfigurationOptions.SectionName).Get<BrokerConfigurationOptions>() ?? new BrokerConfigurationOptions();
-
-builder.Services.AddHybridCache();
 
 if (string.IsNullOrWhiteSpace(brokerOptions.Cache.RedisConnectionString))
 {
@@ -39,7 +36,6 @@ builder.Services.AddAuthorization(options =>
 
 builder.Services.AddSingleton<IRuleMatcher, RuleMatcher>();
 builder.Services.AddSingleton<ITokenExchangeService, TokenExchangeService>();
-builder.Services.AddSingleton(TimeProvider.System);
 
 builder.Services
 	.AddReverseProxy()
