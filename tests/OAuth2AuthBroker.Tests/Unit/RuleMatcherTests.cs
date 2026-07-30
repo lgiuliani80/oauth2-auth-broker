@@ -25,7 +25,7 @@ public sealed class RuleMatcherTests
                     Issuer = "https://issuer",
                     Audience = "*",
                     ClientIdSelector = "*",
-                    TokenEndpoint = "https://login.microsoftonline.com/tenant/oauth2/v2.0/token",
+                    Authority = "https://login.microsoftonline.com/tenant/v2.0",
                     ClientId = "client-wild"
                 },
                 new ReissueRuleOptions
@@ -33,7 +33,7 @@ public sealed class RuleMatcherTests
                     Issuer = "https://issuer",
                     Audience = "api://a",
                     ClientIdSelector = "my-app",
-                    TokenEndpoint = "https://login.microsoftonline.com/tenant/oauth2/v2.0/token",
+                    Authority = "https://login.microsoftonline.com/tenant/v2.0",
                     ClientId = "client-exact"
                 }
             ]

@@ -45,16 +45,16 @@ public sealed class TokenExchangeService : ITokenExchangeService
             ? ResolveDefaultScope(tokenContext.Audiences)
             : match.Rule.Scope!;
 
-        var cacheKey = BuildCacheKey(match.Rule.TokenEndpoint, match.Rule.ClientId, scope);
+        var cacheKey = BuildCacheKey(match.Rule.Authority, match.Rule.ClientId, scope);
 
         var cached = await TryGetCachedTokenAsync(cacheKey, cancellationToken);
         if (!string.IsNullOrWhiteSpace(cached))
         {
-            _logger.LogDebug("Token cache hit for {TokenEndpoint} / {ClientId}", match.Rule.TokenEndpoint, match.Rule.ClientId);
+            _logger.LogDebug("Token cache hit for {Authority} / {ClientId}", match.Rule.Authority, match.Rule.ClientId);
             return cached;
         }
 
-        _logger.LogDebug("Token cache miss for {TokenEndpoint} / {ClientId}", match.Rule.TokenEndpoint, match.Rule.ClientId);
+        _logger.LogDebug("Token cache miss for {Authority} / {ClientId}", match.Rule.Authority, match.Rule.ClientId);
 
         var response = await RequestTokenWithMsalAsync(match.Rule, scope, tokenContext.RawAccessToken, cancellationToken);
         var localTtlConfigured = TimeSpan.FromMinutes(Math.Max(_optionsMonitor.CurrentValue.Cache.LocalTtlMinutes, 1));
@@ -94,15 +94,9 @@ public sealed class TokenExchangeService : ITokenExchangeService
         string inboundAccessToken,
         CancellationToken cancellationToken)
     {
-        var authority = BuildAuthorityFromTokenEndpoint(rule.TokenEndpoint);
-        if (authority is null)
-        {
-            throw new InvalidOperationException($"Unable to infer MSAL authority from token endpoint '{rule.TokenEndpoint}'.");
-        }
-
         var builder = ConfidentialClientApplicationBuilder
             .Create(rule.ClientId)
-            .WithAuthority(authority);
+            .WithOidcAuthority(rule.Authority);
 
         if (!string.IsNullOrWhiteSpace(rule.ClientSecret))
         {
@@ -145,40 +139,8 @@ public sealed class TokenExchangeService : ITokenExchangeService
         return $"{firstAudience}/.default";
     }
 
-    private static string BuildCacheKey(string tokenEndpoint, string clientId, string scope)
-        => $"{tokenEndpoint}|{clientId}|{scope}";
-
-    private static string? BuildAuthorityFromTokenEndpoint(string tokenEndpoint)
-    {
-        if (!Uri.TryCreate(tokenEndpoint, UriKind.Absolute, out var uri))
-        {
-            return null;
-        }
-
-        var segments = uri.AbsolutePath.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries).ToList();
-        if (segments.Count == 0)
-        {
-            return $"{uri.Scheme}://{uri.Host}";
-        }
-
-        while (segments.Count > 0)
-        {
-            var tail = segments[^1];
-            if (tail.Equals("token", StringComparison.OrdinalIgnoreCase)
-                || tail.Equals("v2.0", StringComparison.OrdinalIgnoreCase)
-                || tail.Equals("oauth2", StringComparison.OrdinalIgnoreCase))
-            {
-                segments.RemoveAt(segments.Count - 1);
-                continue;
-            }
-
-            break;
-        }
-
-        return segments.Count == 0
-            ? $"{uri.Scheme}://{uri.Host}"
-            : $"{uri.Scheme}://{uri.Host}/{string.Join('/', segments)}";
-    }
+    private static string BuildCacheKey(string authority, string clientId, string scope)
+        => $"{authority}|{clientId}|{scope}";
 
     private static X509Certificate2 LoadCertificate(string certificateHint, string? password)
     {

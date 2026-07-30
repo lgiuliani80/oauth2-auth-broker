@@ -16,16 +16,24 @@ Reverse proxy OAuth2 broker based on YARP that:
   - `client_secret`
   - `client_certificate` (file path or thumbprint from CurrentUser/LocalMachine)
   - federated credentials fallback (incoming JWT forwarded as `client_assertion`)
-- Uses MSAL for Entra-compatible token endpoints when possible.
+- Uses only MSAL for token acquisition.
+- Reissue rules specify `Authority`, not `TokenEndpoint`.
+- Target IdPs used for token reissue must support OIDC discovery because MSAL is configured through `WithOidcAuthority(...)`.
 
 ## Cache behavior
 
-- Cache key: `token_endpoint|client_id|scope`.
+- Cache key: `authority|client_id|scope`.
 - Local TTL: `min(LocalTtlMinutes, exp-now-5s)`.
 - Distributed TTL: `exp-now-5s`.
 - Distributed cache provider:
   - default: `MemoryDistributedCache`
   - if `AuthBroker:Cache:RedisConnectionString` is set: `StackExchange.RedisCache`
+
+## OIDC authority notes
+
+- Entra ID example authority: `https://login.microsoftonline.com/<tenant-id>/v2.0`
+- ADFS example authority: base ADFS URL, for example `https://adfs.contoso.local/adfs`
+- This implementation intentionally relies on OIDC discovery through MSAL instead of deriving the token endpoint manually.
 
 ## Run
 
