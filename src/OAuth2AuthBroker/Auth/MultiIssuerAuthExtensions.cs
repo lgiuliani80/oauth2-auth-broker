@@ -20,30 +20,35 @@ public static class MultiIssuerAuthExtensions
                 options.DefaultAuthenticateScheme = AuthenticationSchemeNames.MultiIssuer;
                 options.DefaultChallengeScheme = AuthenticationSchemeNames.MultiIssuer;
             })
+            .AddJwtBearer(AuthenticationSchemeNames.Fallback, options => {
+                // This is a fallback scheme that will be used if no other scheme matches.
+                options.TokenValidationParameters.ValidateAudience = false;
+                options.TokenValidationParameters.ValidateIssuer = false;
+            })
             .AddPolicyScheme(AuthenticationSchemeNames.MultiIssuer, "Multi issuer bearer", options =>
             {
                 options.ForwardDefaultSelector = context =>
                 {
                     if (!context.Request.Headers.TryGetValue("Authorization", out var authorizationHeader))
                     {
-                        return null;
+                        return AuthenticationSchemeNames.Fallback;
                     }
 
                     var token = ExtractBearerToken(authorizationHeader.ToString());
                     if (string.IsNullOrWhiteSpace(token))
                     {
-                        return null;
+                        return AuthenticationSchemeNames.Fallback;
                     }
 
                     var handler = new JsonWebTokenHandler();
                     if (!handler.CanReadToken(token))
                     {
-                        return null;
+                        return AuthenticationSchemeNames.Fallback;
                     }
 
                     var jwt = handler.ReadJsonWebToken(token);
                     var schemes = context.RequestServices.GetRequiredService<IssuerSchemeRegistry>();
-                    return schemes.TryGetScheme(jwt.Issuer, out var scheme) ? scheme : null;
+                    return schemes.TryGetScheme(jwt.Issuer, out var scheme) ? scheme : AuthenticationSchemeNames.Fallback;
                 };
             });
 

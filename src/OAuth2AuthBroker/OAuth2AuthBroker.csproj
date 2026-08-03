@@ -4,6 +4,8 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+	<UserSecretsId>OAuth2Broker</UserSecretsId>
+	<FileVersion>0.2.2608.0301</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>

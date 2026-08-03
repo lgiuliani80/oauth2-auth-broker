@@ -2,6 +2,7 @@ using OAuth2AuthBroker.Auth;
 using OAuth2AuthBroker.Middleware;
 using OAuth2AuthBroker.Options;
 using OAuth2AuthBroker.Services;
+using System.Reflection;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -10,6 +11,7 @@ builder.Services
 	.Bind(builder.Configuration.GetSection(BrokerConfigurationOptions.SectionName))
 	.ValidateDataAnnotations()
 	.ValidateOnStart();
+
 builder.Services.AddSingleton<Microsoft.Extensions.Options.IValidateOptions<BrokerConfigurationOptions>, BrokerOptionsValidator>();
 
 var brokerOptions = builder.Configuration.GetSection(BrokerConfigurationOptions.SectionName).Get<BrokerConfigurationOptions>() ?? new BrokerConfigurationOptions();
@@ -48,7 +50,10 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<AuthenticatedRouteTokenMiddleware>();
 
-app.MapGet("/healthz", () => Results.Ok(new { status = "ok" }));
+app.MapGet("/healthz", () => Results.Ok(new { 
+	status = "ok",
+	version = typeof(Program).Assembly.GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version ?? "unknown"
+}));
 app.MapReverseProxy();
 
 app.Run();
