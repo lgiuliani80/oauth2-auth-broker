@@ -6,10 +6,12 @@ COPY src/OAuth2AuthBroker/OAuth2AuthBroker.csproj src/OAuth2AuthBroker/
 RUN dotnet restore src/OAuth2AuthBroker/OAuth2AuthBroker.csproj
 
 COPY src/OAuth2AuthBroker/ src/OAuth2AuthBroker/
+ARG FILE_VERSION
 RUN dotnet publish src/OAuth2AuthBroker/OAuth2AuthBroker.csproj \
     --no-restore \
     -c Release \
-    -o /app/publish
+    -o /app/publish \
+    ${FILE_VERSION:+-p:FileVersion=${FILE_VERSION}}
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app

@@ -27,6 +27,18 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Derive .NET file version
+        id: file-version
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          if [[ "$tag" =~ ^v([0-9]+)\.([0-9]+)\. ]]; then
+            year_month="$(date -u +'%y%m')"
+            day="$(date -u +'%d')"
+            run_number="$(printf '%02d' "${GITHUB_RUN_NUMBER}")"
+            echo "file_version=${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${year_month}.${day}${run_number}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -44,3 +56,5 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            FILE_VERSION=${{ steps.file-version.outputs.file_version }}
